@@ -1,0 +1,14 @@
+{
+	"title": "Combine Arms",
+	"type":	"weapon",
+	"tags":	["fun", "roleplay"],
+	"ignore":
+	[
+		"*.bat",
+		"*.jpg",
+		"*.md",
+		".git*",
+		"LICENSE",
+		"source*"
+	]
+}
