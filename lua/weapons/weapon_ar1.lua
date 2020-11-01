@@ -157,12 +157,13 @@ function SWEP:Reload()
 		if ammo <= 0 then
 			return
 		end
+
+		self:SetInReload(true)
 	end
 
 	ply:SetAnimation(PLAYER_RELOAD)
 	self:SendWeaponAnim(ACT_VM_RELOAD)
 
-	self:SetInReload(true)
 	self:SetNextPrimaryFire(CurTime() + self:SequenceDuration())
 end
 
@@ -186,7 +187,33 @@ function SWEP:Think()
 end
 
 if CLIENT then
-		function SWEP:CalcViewModelView(vm, oldPos, oldAng, pos, ang)
+	function SWEP:CalcViewModelView(vm, oldPos, oldAng, pos, ang)
 		return LocalToWorld(Vector(-2, 0, -0.5), Angle(), pos, ang)
+	end
+end
+
+if SERVER then
+	function SWEP:GetCapabilities()
+		return bit.bor(CAP_WEAPON_RANGE_ATTACK1, CAP_INNATE_RANGE_ATTACK1)
+	end
+
+	local spread = {
+		[WEAPON_PROFICIENCY_POOR] = 7,
+		[WEAPON_PROFICIENCY_AVERAGE] = 4,
+		[WEAPON_PROFICIENCY_GOOD] = 2,
+		[WEAPON_PROFICIENCY_VERY_GOOD] = 5 / 3, -- 1.666...
+		[WEAPON_PROFICIENCY_PERFECT] = 1
+	}
+
+	function SWEP:GetNPCBulletSpread(prof)
+		return spread[prof]
+	end
+
+	function SWEP:GetNPCBurstSettings()
+		return 3, 3, self.FireRate
+	end
+
+	function SWEP:GetNPCRestTimes()
+		return self.FireRate * 2, self.FireRate * 4
 	end
 end

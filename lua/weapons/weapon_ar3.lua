@@ -49,11 +49,22 @@ function SWEP:SetupDataTables()
 	self:NetworkVar("Bool", 0, "InReload")
 
 	self:NetworkVar("Float", 0, "FireStart")
+	self:NetworkVar("Float", 1, "LastFire")
 end
 
 function SWEP:Deploy()
 	self:SetHoldType(self.HoldType)
 	self:SetFireStart(0)
+end
+
+function SWEP:OwnerChanged()
+	local ply = self:GetOwner()
+
+	if IsValid(ply) and ply:IsNPC() then
+		hook.Add("Think", self, self.NPCThink)
+	else
+		hook.Remove("Think", self)
+	end
 end
 
 function SWEP:Holster()
@@ -104,32 +115,28 @@ function SWEP:PrimaryAttack()
 	end
 
 	if ply:IsPlayer() then
-		if slow then
-			self:ViewKick(ply, self.RecoilKick * 0.25, self.RecoilTime * 2)
-		else
-			self:ViewKick(ply, self.RecoilKick, self.RecoilTime)
-		end
+		self:ViewKick(ply, self.RecoilKick, self.RecoilTime)
 	end
 
-	if slow then
-		self:SetNextPrimaryFire(CurTime() + self.FireRate * 2)
-	else
-		self:SetNextPrimaryFire(CurTime() + self.FireRate)
-	end
+	self:SetLastFire(CurTime())
+
+	self:SetNextPrimaryFire(CurTime() + self.FireRate)
 end
 
 function SWEP:StartFiring()
 	self:SetFireStart(CurTime())
 	self:EmitSound("NPC_Hunter.FlechetteShootLoop")
 
-	hook.Add("Move", self, function(ent, ply, mv)
-		if ply == ent:GetOwner() then
-			local speed = ply:GetWalkSpeed()
+	if self:GetOwner():IsPlayer() then
+		hook.Add("Move", self, function(ent, ply, mv)
+			if ply == ent:GetOwner() then
+				local speed = ply:GetWalkSpeed()
 
-			mv:SetMaxSpeed(speed)
-			mv:SetMaxClientSpeed(speed)
-		end
-	end)
+				mv:SetMaxSpeed(speed)
+				mv:SetMaxClientSpeed(speed)
+			end
+		end)
+	end
 end
 
 function SWEP:StopFiring()
@@ -185,6 +192,8 @@ function SWEP:Reload()
 		if ammo <= 0 then
 			return
 		end
+
+		self:SetInReload(true)
 	end
 
 	self:StopFiring()
@@ -192,7 +201,6 @@ function SWEP:Reload()
 	ply:SetAnimation(PLAYER_RELOAD)
 	self:SendWeaponAnim(ACT_VM_RELOAD)
 
-	self:SetInReload(true)
 	self:SetNextPrimaryFire(CurTime() + self:SequenceDuration())
 end
 
@@ -209,17 +217,46 @@ function SWEP:Think()
 		ply:RemoveAmmo(amt, self.Primary.Ammo)
 	end
 
-	if IsValid(ply) and ply:IsPlayer() and not ply:KeyDown(IN_ATTACK) then
-		if self:GetFireStart() != 0 and (not game.SinglePlayer() or SERVER) then
-			self:StopFiring()
-		end
+	if not ply:KeyDown(IN_ATTACK) and self:GetFireStart() != 0 and (not game.SinglePlayer() or SERVER) then
+		self:StopFiring()
+	end
+end
 
-		self:SetFireStart(0)
+function SWEP:NPCThink()
+	if CurTime() - self:GetLastFire() > self.FireRate then
+		self:StopFiring()
 	end
 end
 
 if CLIENT then
-		function SWEP:CalcViewModelView(vm, oldPos, oldAng, pos, ang)
+	function SWEP:CalcViewModelView(vm, oldPos, oldAng, pos, ang)
 		return LocalToWorld(Vector(-2, 0, -0.5), Angle(), pos, ang)
+	end
+end
+
+if SERVER then
+
+	function SWEP:GetCapabilities()
+		return bit.bor(CAP_WEAPON_RANGE_ATTACK1, CAP_INNATE_RANGE_ATTACK1)
+	end
+
+	local spread = {
+		[WEAPON_PROFICIENCY_POOR] = 7,
+		[WEAPON_PROFICIENCY_AVERAGE] = 4,
+		[WEAPON_PROFICIENCY_GOOD] = 2,
+		[WEAPON_PROFICIENCY_VERY_GOOD] = 5 / 3, -- 1.666...
+		[WEAPON_PROFICIENCY_PERFECT] = 1
+	}
+
+	function SWEP:GetNPCBulletSpread(prof)
+		return spread[prof]
+	end
+
+	function SWEP:GetNPCBurstSettings()
+		return 10, 25, self.FireRate
+	end
+
+	function SWEP:GetNPCRestTimes()
+		return 0.5, 1
 	end
 end
